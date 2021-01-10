@@ -2,6 +2,36 @@ from cffi import FFI
 ffi = FFI()
 
 ffi.cdef("""
+
+typedef struct _OVERLAPPED {
+    ULONG_PTR Internal;
+    ULONG_PTR InternalHigh;
+    union {
+        struct {
+            DWORD Offset;
+            DWORD OffsetHigh;
+        } DUMMYSTRUCTNAME;
+        PVOID Pointer;
+    } DUMMYUNIONNAME;
+
+    HANDLE  hEvent;
+} OVERLAPPED, *LPOVERLAPPED;
+
+struct hid_device_ {
+		HANDLE device_handle;
+		BOOL blocking;
+		USHORT output_report_length;
+		size_t input_report_length;
+		USHORT feature_report_length;
+		unsigned char *feature_buf;
+		void *last_error_str;
+		DWORD last_error_num;
+		BOOL read_pending;
+		char *read_buf;
+		OVERLAPPED ol;
+		OVERLAPPED write_ol;
+};
+
 struct hid_device_;
 typedef struct hid_device_ hid_device;
 
