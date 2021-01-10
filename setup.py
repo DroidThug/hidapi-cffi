@@ -9,5 +9,5 @@ setup(
     author_email="johannes.baiter@gmail.com",
     license='BSD',
     py_modules=['hidapi'],
-    setup_requires=['cffi >= 0.8']
+    setup_requires=['cffi >= 1.14.4']
 )
