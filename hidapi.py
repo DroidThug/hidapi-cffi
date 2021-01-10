@@ -79,7 +79,19 @@ int hid_get_indexed_string(hid_device *device, int string_index,
 const wchar_t* hid_error(hid_device *device);
 """)
 
-for lib in ('hidapi-libusb', 'hidapi-hidraw', 'hidapi'):
+library_paths = (
+    'libhidapi-hidraw.so',
+    'libhidapi-hidraw.so.0',
+    'libhidapi-libusb.so',
+    'libhidapi-libusb.so.0',
+    'libhidapi-iohidmanager.so',
+    'libhidapi-iohidmanager.so.0',
+    'libhidapi.dylib',
+    'hidapi.dll',
+    'libhidapi-0.dll'
+)
+
+for lib in library_paths:
     try:
         hidapi = ffi.dlopen(lib)
         break
