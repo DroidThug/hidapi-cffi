@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='hidapi-usb',
-    version="0.2.6",
+    version="0.3",
     description=("CFFI wrapper for hidapi with changes by flok"),
     author="Florian K",
     url="https://github.com/flok/hidapi-cffi.git",
