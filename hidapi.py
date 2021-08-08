@@ -51,7 +51,7 @@ int hid_get_indexed_string(hid_device *device, int string_index,
                            wchar_t *string, size_t maxlen);
 const wchar_t* hid_error(hid_device *device);
 """)
-elif platform.startswith('windows'):
+elif platform.startswith('win32'):
     ffi.cdef("""
 
 typedef struct _OVERLAPPED {
