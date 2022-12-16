@@ -2,7 +2,7 @@ from cffi import FFI
 from sys import platform
 ffi = FFI()
 
-if platform.startswith('linux'):
+if platform.startswith('linux') or platform.startswith('darwin'):
     ffi.cdef("""
 
 struct hid_device_;
