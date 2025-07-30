@@ -2,7 +2,7 @@ from cffi import FFI
 from sys import platform
 ffi = FFI()
 
-if platform.startswith('linux') or platform.startswith('darwin'):
+if platform.startswith('linux'):
     ffi.cdef("""
 
 struct hid_device_;
@@ -50,6 +50,61 @@ int hid_get_serial_number_string(hid_device *device, wchar_t *string,
 int hid_get_indexed_string(hid_device *device, int string_index,
                            wchar_t *string, size_t maxlen);
 const wchar_t* hid_error(hid_device *device);
+""")
+elif platform.startswith('darwin'):
+    ffi.cdef("""
+
+struct hid_device_;
+typedef struct hid_device_ hid_device;
+
+struct hid_device_info {
+    char *path;
+    unsigned short vendor_id;
+    unsigned short product_id;
+    wchar_t *serial_number;
+    unsigned short release_number;
+    wchar_t *manufacturer_string;
+    wchar_t *product_string;
+    unsigned short usage_page;
+    unsigned short usage;
+    int interface_number;
+    struct hid_device_info *next;
+};
+
+int  hid_init(void);
+int  hid_exit(void);
+
+struct hid_device_info* hid_enumerate(unsigned short vendor_id,
+                                      unsigned short product_id);
+void hid_free_enumeration(struct hid_device_info *devs);
+hid_device* hid_open(unsigned short vendor_id, unsigned short product_id,
+                     const wchar_t *serial_number);
+hid_device* hid_open_path(const char *path);
+int hid_write(hid_device *device, const unsigned char *data, size_t length);
+int hid_read_timeout(hid_device *dev, unsigned char *data, size_t length,
+                     int milliseconds);
+int hid_read(hid_device *device, unsigned char *data, size_t length);
+int hid_set_nonblocking(hid_device *device, int nonblock);
+int hid_send_feature_report(hid_device *device, const unsigned char *data,
+                            size_t length);
+int hid_get_feature_report(hid_device *device, unsigned char *data,
+                           size_t length);
+void hid_close(hid_device *device);
+int hid_get_manufacturer_string(hid_device *device, wchar_t *string,
+                                size_t maxlen);
+int hid_get_product_string(hid_device *device, wchar_t *string,
+                           size_t maxlen);
+int hid_get_serial_number_string(hid_device *device, wchar_t *string,
+                                 size_t maxlen);
+int hid_get_indexed_string(hid_device *device, int string_index,
+                           wchar_t *string, size_t maxlen);
+const wchar_t* hid_error(hid_device *device);
+
+// Darwin-specific functions from hidapi_darwin.h
+int hid_darwin_get_location_id(hid_device *dev, unsigned int *location_id);
+void hid_darwin_set_open_exclusive(int open_exclusive);
+int hid_darwin_get_open_exclusive(void);
+int hid_darwin_is_device_open_exclusive(hid_device *dev);
 """)
 elif platform.startswith('win32'):
     ffi.cdef("""
@@ -155,6 +210,66 @@ else:
 
 if hidapi.hid_init() == -1:
     raise OSError("Failed to initialize hidapi")
+
+# Darwin-specific option to open device in non-exclusive mode by default
+if platform.startswith('darwin'):
+    # Check if Darwin functions are available and set non-exclusive mode by default
+    if hasattr(hidapi, 'hid_darwin_set_open_exclusive'):
+        try:
+            hidapi.hid_darwin_set_open_exclusive(0)  # Set non-exclusive as default
+            # Verify the setting was applied
+            current_mode = hidapi.hid_darwin_get_open_exclusive()
+            if current_mode != 0:
+                import warnings
+                warnings.warn(f"Failed to set non-exclusive mode. Current mode: {current_mode}")
+        except Exception as e:
+            # If this fails, warn the user but continue
+            import warnings
+            warnings.warn(f"Could not set Darwin non-exclusive mode: {e}")
+            pass
+
+
+# Darwin-specific functions
+def darwin_set_open_exclusive(open_exclusive=0):
+    """Set open exclusive on macOS.
+    
+    :param open_exclusive: When set to 0 - all further devices will be opened
+                           in non-exclusive mode. Otherwise - all further devices will be opened
+                           in exclusive mode. Default = 0 (non-exclusive)
+    """
+    if not platform.startswith('darwin'):
+        raise NotImplementedError('darwin_set_open_exclusive is only available on macOS')
+    
+    # Check if hidapi is available
+    if 'hidapi' not in globals():
+        raise RuntimeError('hidapi library not loaded')
+    
+    # Check if the Darwin-specific function is available in the loaded library
+    if not hasattr(hidapi, 'hid_darwin_set_open_exclusive'):
+        raise RuntimeError('hidapi library does not support Darwin-specific functions. '
+                         'Make sure you have a hidapi library built with Darwin support.')
+    
+    hidapi.hid_darwin_set_open_exclusive(open_exclusive)
+
+def darwin_get_open_exclusive():
+    """Get open exclusive on macOS.
+    
+    :return: 1 if all further devices will be opened in exclusive mode.
+    :rtype: int
+    """
+    if not platform.startswith('darwin'):
+        raise NotImplementedError('darwin_get_open_exclusive is only available on macOS')
+    
+    # Check if hidapi is available
+    if 'hidapi' not in globals():
+        raise RuntimeError('hidapi library not loaded')
+    
+    # Check if the Darwin-specific function is available in the loaded library
+    if not hasattr(hidapi, 'hid_darwin_get_open_exclusive'):
+        raise RuntimeError('hidapi library does not support Darwin-specific functions. '
+                         'Make sure you have a hidapi library built with Darwin support.')
+    
+    return hidapi.hid_darwin_get_open_exclusive()
 
 
 class DeviceInfo(object):
@@ -415,6 +530,58 @@ class Device(object):
                           "device: {0}"
                           .format(idx, self._get_last_error_string()))
         return ffi.buffer(bufp, 65536)[:].strip()
+
+    def darwin_get_location_id(self):
+        """Return location id on macOS.
+        
+        :return: Location ID
+        :rtype: int
+        :raises ValueError: If connection is not opened.
+        :raises IOError: If getting location ID fails.
+        """
+        if not platform.startswith('darwin'):
+            raise NotImplementedError('darwin_get_location_id is only available on macOS')
+        
+        self._check_device_status()
+        
+        # Check if hidapi is available
+        if 'hidapi' not in globals():
+            raise RuntimeError('hidapi library not loaded')
+        
+        # Check if the Darwin-specific function is available in the loaded library
+        if not hasattr(hidapi, 'hid_darwin_get_location_id'):
+            raise RuntimeError('hidapi library does not support Darwin-specific functions. '
+                             'Make sure you have a hidapi library built with Darwin support.')
+        
+        location_id_p = ffi.new("unsigned int *")
+        rv = hidapi.hid_darwin_get_location_id(self._device, location_id_p)
+        if rv < 0:
+            raise IOError('get darwin location id error')
+        return location_id_p[0]
+    
+    def darwin_is_device_open_exclusive(self):
+        """Check if the given device is opened in exclusive mode on macOS.
+        
+        :return: 1 if the device is opened in exclusive mode, 0 - opened in non-exclusive,
+                 -1 - if dev is invalid.
+        :rtype: int
+        :raises ValueError: If connection is not opened.
+        """
+        if not platform.startswith('darwin'):
+            raise NotImplementedError('darwin_is_device_open_exclusive is only available on macOS')
+        
+        self._check_device_status()
+        
+        # Check if hidapi is available
+        if 'hidapi' not in globals():
+            raise RuntimeError('hidapi library not loaded')
+        
+        # Check if the Darwin-specific function is available in the loaded library
+        if not hasattr(hidapi, 'hid_darwin_is_device_open_exclusive'):
+            raise RuntimeError('hidapi library does not support Darwin-specific functions. '
+                             'Make sure you have a hidapi library built with Darwin support.')
+        
+        return hidapi.hid_darwin_is_device_open_exclusive(self._device)
 
     def close(self):
         """ Close connection to HID device.
